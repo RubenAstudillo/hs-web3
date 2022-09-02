@@ -158,6 +158,19 @@ instance ToJSON DefaultBlock where
     toJSON (BlockWithNumber bn) = toJSON bn
     toJSON parameter            = toJSON . over _head toLower . show $ parameter
 
+
+-- | Topic type for when a single topic is sought after or when any matching topics are found.
+data FilterTopic = SingleTopic HexString
+                 | AnyTopics [HexString]
+    deriving (Eq, Show, Generic)
+
+instance ToJSON FilterTopic where
+    toJSON (SingleTopic bytes)     = toJSON bytes
+    toJSON (AnyTopics listOfBytes) = toJSON listOfBytes
+
+instance IsString FilterTopic where
+    fromString = SingleTopic . fromString
+
 -- | Low-level event filter data structure.
 data Filter e = Filter
     { filterAddress   :: !(Maybe [Address])
@@ -166,7 +179,7 @@ data Filter e = Filter
     -- ^ QUANTITY|TAG - (optional, default: "latest") Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
     , filterToBlock   :: !DefaultBlock
     -- ^ QUANTITY|TAG - (optional, default: "latest") Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    , filterTopics    :: !(Maybe [Maybe HexString])
+    , filterTopics    :: !(Maybe [Maybe FilterTopic])
     -- ^ Array of DATA, - (optional) Array of 32 Bytes DATA topics. Topics are order-dependent. Each topic can also be an array of DATA with "or" options.
     }
     deriving (Eq, Show, Generic)
