@@ -209,9 +209,13 @@ call m r = do
 decodeResponse :: (MonadThrow m, FromJSON a)
                => ByteString
                -> m a
-decodeResponse = (tryParse . eitherDecode . encode)
+decodeResponse = tryParse'
                <=< tryResult . rsResult
                <=< tryParse . eitherDecode
   where
     tryParse = either (throwM . ParsingException) return
     tryResult = either (throwM . CallException) return
+    tryParse' v0 =
+      case (eitherDecode . encode) v0 of
+        Right v1 -> pure v1
+        Left _ -> throwM (ParsingException (show v0))
