@@ -77,6 +77,8 @@ data EventArg = EventArg
     -- ^ Argument type
     , eveArgIndexed :: Bool
     -- ^ Argument is indexed (e.g. placed on topics of event)
+    , eveArgComponents :: Maybe [FunctionArg]
+    -- ^ Subcomponents of the tuple type. Forces 'eveArgType' to be tuple.
     }
     deriving (Show, Eq, Ord)
 
@@ -348,4 +350,8 @@ parseSolidityFunctionArgType (FunctionArg _ typ mcmps) = case mcmps of
         _         -> error $ "Unexpected type " ++ T.unpack typ ++ " - expected tuple or tuple[]"
 
 parseSolidityEventArgType :: EventArg -> Either ParseError SolidityType
-parseSolidityEventArgType (EventArg _ typ _) = parse solidityTypeParser "Solidity" typ
+parseSolidityEventArgType (EventArg _ typ _ mcomp)
+  | Just comp@(_hd : _tl) <- mcomp =
+      let ecomponentTypes = fmap parseSolidityFunctionArgType comp
+      in SolidityTuple <$> sequence ecomponentTypes
+  | otherwise = parse solidityTypeParser "Solidity" typ
