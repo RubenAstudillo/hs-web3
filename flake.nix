@@ -132,7 +132,6 @@
           withHoogle = false;
           buildInputs = with haskellPackages; [
             haskell-language-server
-            ghcid
             cabal-install
           ];
         # Change the prompt to show that you are in a devShell
