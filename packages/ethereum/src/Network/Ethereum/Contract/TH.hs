@@ -53,6 +53,7 @@ import           Data.ByteArray.HexString         (HexString)
 import           Data.Char                        (toLower, toUpper)
 import qualified Data.Char                        as Char
 import           Data.Default                     (Default (..))
+import           Data.Maybe                       (fromMaybe)
 import           Data.List                        (group, sort, uncons)
 import           Data.Tagged                      (Tagged)
 import           Data.Text                        (Text)
@@ -224,9 +225,9 @@ mkDecl ev@(DEvent uncheckedName inputs anonymous) = sequence
     toBang ty = bangType (bang sourceNoUnpack sourceStrict) (return ty)
     tag (n, ty) = AppT (AppT (ConT ''Tagged) (LitT $ NumTyLit n)) <$> typeEventQ ty
     labeledArgs = zip [1..] inputs
-    indexedArgs = map (\(n, ea) -> (n, ea)) . filter (eveArgIndexed . snd) $ labeledArgs
+    indexedArgs = map (\(n, ea) -> (n, ea)) . filter (fromMaybe False . eveArgIndexed . snd) $ labeledArgs
     indexedName = mkName $ over _head toUpper (T.unpack name) <> "Indexed"
-    nonIndexedArgs = map (\(n, ea) -> (n, ea)) . filter (not . eveArgIndexed . snd) $ labeledArgs
+    nonIndexedArgs = map (\(n, ea) -> (n, ea)) . filter (not . fromMaybe False . eveArgIndexed . snd) $ labeledArgs
     nonIndexedName = mkName $ over _head toUpper (T.unpack name) <> "NonIndexed"
     allArgs :: [(Name, EventArg)]
     allArgs = makeArgs name $ map (\i -> (eveArgName i, i)) inputs

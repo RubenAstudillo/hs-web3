@@ -44,8 +44,8 @@ import           Data.Aeson.TH            (deriveJSON, deriveToJSON)
 import qualified Data.ByteArray           as A (take)
 import           Data.ByteArray.HexString (toText)
 import           Data.Char                (toLower)
-import           Data.Text                (Text)
-import qualified Data.Text                as T (dropEnd, unlines, unpack)
+import           Data.Text                (Text, intercalate)
+import qualified Data.Text                as T (unlines, unpack)
 import           Data.Text.Encoding       (encodeUtf8)
 import           Lens.Micro               (over, _head)
 import           Text.Parsec              (ParseError, char, choice, digit, eof,
@@ -70,16 +70,17 @@ $(deriveJSON
     ''FunctionArg)
 
 -- | Event argument
-data EventArg = EventArg
-    { eveArgName    :: Text
-    -- ^ Argument name
-    , eveArgType    :: Text
-    -- ^ Argument type
-    , eveArgIndexed :: Bool
-    -- ^ Argument is indexed (e.g. placed on topics of event)
-    , eveArgComponents :: Maybe [FunctionArg]
-    -- ^ Subcomponents of the tuple type. Forces 'eveArgType' to be tuple.
-    }
+data EventArg
+  = EventArg
+      { eveArgName    :: Text
+      -- ^ Argument name
+      , eveArgType    :: Text
+      -- ^ Argument type
+      , eveArgIndexed :: Maybe Bool
+      -- ^ Argument is indexed (e.g. placed on topics of event). Only on top level input field.
+      , eveArgComponents :: Maybe [EventArg]
+      -- ^ Subcomponents of the tuple type. Forces 'eveArgType' to be tuple.
+      }
     deriving (Show, Eq, Ord)
 
 $(deriveJSON
@@ -235,6 +236,11 @@ funArgs (x:xs) = case funArgComponents x of
       "tuple[]" -> "(" <> funArgs cmps <> ")[]," <> funArgs xs
       typ       -> error $ "Unexpected type " ++ T.unpack typ ++ " - expected tuple or tuple[]"
 
+eventArgs :: EventArg -> Text
+eventArgs (EventArg _ typ _ mcomps)
+  | Nothing <- mcomps = typ
+  | Just comps <- mcomps = "(" <> intercalate "," (fmap eventArgs comps) <> ")"
+
 -- | Take a signature by given decl, e.g. foo(uint,string)
 signature :: Declaration -> Text
 
@@ -242,10 +248,7 @@ signature (DConstructor inputs) = "(" <> funArgs inputs <> ")"
 signature (DFallback _) = "()"
 signature (DFunction name _ inputs _) = name <> "(" <> funArgs inputs <> ")"
 signature (DError name inputs) = name <> "(" <> funArgs inputs <> ")"
-signature (DEvent name inputs _) = name <> "(" <> args inputs <> ")"
-  where
-    args :: [EventArg] -> Text
-    args = T.dropEnd 1 . foldMap (<> ",") . fmap eveArgType
+signature (DEvent name inputs _) = name <> "(" <> intercalate "," (fmap eventArgs inputs) <> ")"
 
 -- | Generate method selector by given method 'Delcaration'
 methodId :: Declaration -> Text
@@ -350,8 +353,11 @@ parseSolidityFunctionArgType (FunctionArg _ typ mcmps) = case mcmps of
         _         -> error $ "Unexpected type " ++ T.unpack typ ++ " - expected tuple or tuple[]"
 
 parseSolidityEventArgType :: EventArg -> Either ParseError SolidityType
-parseSolidityEventArgType (EventArg _ typ _ mcomp)
-  | Just comp@(_hd : _tl) <- mcomp =
-      let ecomponentTypes = fmap parseSolidityFunctionArgType comp
-      in SolidityTuple <$> sequence ecomponentTypes
-  | otherwise = parse solidityTypeParser "Solidity" typ
+parseSolidityEventArgType (EventArg _ typ _ mcmps) = case mcmps of
+  Nothing -> parse solidityTypeParser "Solidity" typ
+  Just cmps -> do
+    tpl <- SolidityTuple <$> mapM parseSolidityEventArgType cmps
+    case typ of
+        "tuple"   -> return tpl
+        "tuple[]" -> return $ SolidityArray tpl
+        _         -> error $ "Unexpected type " ++ T.unpack typ ++ " - expected tuple or tuple[]"
